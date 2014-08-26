@@ -1,6 +1,38 @@
 #include <stdio.h>
+#include <string.h>
 #include <unistd.h>
 #include <pcap.h>
+
+/*
+typedef enum RTMPPacketType {
+    RTMP_PT_CHUNK_SIZE   =  1,
+    RTMP_PT_BYTES_READ   =  3,
+    RTMP_PT_PING,
+    RTMP_PT_SERVER_BW,
+    RTMP_PT_CLIENT_BW,
+    RTMP_PT_AUDIO        =  8,
+    RTMP_PT_VIDEO,
+    RTMP_PT_FLEX_STREAM  = 15,
+    RTMP_PT_FLEX_OBJECT,
+    RTMP_PT_FLEX_MESSAGE,
+    RTMP_PT_NOTIFY,
+    RTMP_PT_SHARED_OBJ,
+    RTMP_PT_INVOKE,
+    RTMP_PT_METADATA     = 22,
+} RTMPPacketType;
+
+typedef struct RTMPPacket {
+    int            channel_id;
+    RTMPPacketType type;
+    uint32_t       timestamp;
+    uint32_t       ts_field;
+    uint32_t       extra;
+    uint8_t        *data;
+    int            size;
+    int            offset;
+    int            read;
+} RTMPPacket;
+*/
 
 int checkParam(const char* devName)
 {
@@ -39,7 +71,10 @@ pcap_t *openDev(const char *devName)
 
 void worker(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes)
 {
-    printf("hello\n");
+    if (strcmp("publish", (const char*)bytes + 0x45))
+    {
+        printf("%s\n", bytes + 0x96);
+    }
 }
 
 int getPkg(pcap_t *dev)
@@ -55,7 +90,7 @@ int getPkg(pcap_t *dev)
 int setFilter(pcap_t *dev)
 {
     struct bpf_program filter;
-    if (pcap_compile(dev, &filter, "dst port 1935", 1, 0))
+    if (pcap_compile(dev, &filter, "dst port 80", 1, 0))
     {
         printf("bad filter\n");
         return -1;
