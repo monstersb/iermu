@@ -90,7 +90,7 @@ int getPkg(pcap_t *dev)
 int setFilter(pcap_t *dev)
 {
     struct bpf_program filter;
-    if (pcap_compile(dev, &filter, "dst port 80", 1, 0))
+    if (pcap_compile(dev, &filter, "dst port 1935", 1, 0))
     {
         printf("bad filter\n");
         return -1;
