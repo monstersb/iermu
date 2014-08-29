@@ -108,14 +108,14 @@ int main(int argc, char *argv[])
 
 	if (pcap_compile(handle, &fp, FILTER, 0, net) == -1)
 	{
-		fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
+		fprintf(stderr, "Couldn't parse filter %s: %s\n", FILTER, pcap_geterr(handle));
 		return -1;
 	}
 
 	if (pcap_setfilter(handle, &fp) == -1)
 	{
-		fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
-		return;
+		fprintf(stderr, "Couldn't install filter %s: %s\n", FILTER, pcap_geterr(handle));
+		return -1;
 	}
 
 	pcap_loop(handle, NUM_PACKAGES, got_packet, NULL);
