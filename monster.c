@@ -3,6 +3,9 @@
 #include <unistd.h>
 #include <pcap.h>
 
+#define SNAP_LEN		1518
+#define NUM_PACKAGES	-1
+
 /*
 typedef enum RTMPPacketType {
     RTMP_PT_CHUNK_SIZE   =  1,
@@ -34,57 +37,12 @@ typedef struct RTMPPacket {
 } RTMPPacket;
 */
 
-int checkParam(const char* devName)
-{
-    bpf_u_int32 netp;
-    bpf_u_int32 maskp;
-    char errMsg[PCAP_ERRBUF_SIZE];
-    if (devName == NULL)
-    {
-        printf("invalid parameter\n");
-        return -1;
-    }
-    if (pcap_lookupnet(devName, &netp, &maskp, errMsg))
-    {
-        printf("%s\n", errMsg);
-        return -1;
-    }
-    if (getuid() != 0)
-    {
-        printf("must be run as root\n");
-        return -1;
-    }
-    return 0;
-}
-
-pcap_t *openDev(const char *devName)
-{
-    pcap_t *dev;
-    char errMsg[PCAP_ERRBUF_SIZE];
-    dev = pcap_open_live(devName, 0x00010000, 1, 0, errMsg);
-    if (!dev)
-    {
-        printf("%s\n", errMsg);
-    }
-    return dev;
-}
-
-void worker(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes)
+void got_packet(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes)
 {
     if (strcmp("publish", (const char*)bytes + 0x45))
     {
         printf("%s\n", bytes + 0x96);
     }
-}
-
-int getPkg(pcap_t *dev)
-{
-    if (pcap_loop(dev, -1, worker, NULL) < 0)
-    {
-        printf("an error occured\n");
-        return -1;
-    }
-    return 0;
 }
 
 int setFilter(pcap_t *dev)
@@ -105,24 +63,62 @@ int setFilter(pcap_t *dev)
 
 int main(int argc, char *argv[])
 {
-    pcap_t *dev;
-    if (checkParam(argv[1]))
+	char *dev = NULL;
+	char errbuf[PCAP_ERRBUF_SIZE];
+	pcap_t *handle;
+	bpf_u_int32 mask;
+	bpf_u_int32 net;
+
+
+    if (getuid() != 0)
     {
+        printf("must be run as root\n");
         return -1;
     }
-    dev = openDev(argv[1]);
-    if (!dev)
+
+	if (argc == 2)
+	{
+		dev = argv[1];
+	}
+	else if (argc > 2)
+	{
+		fprintf(stderr, "error: unrecognized command-line options\n\n");
+		return -1;
+	}
+	else
+	{
+		dev = pcap_lookupdev(errbuf);
+		if (dev == NULL)
+		{
+			fprintf(stderr, "Couldn't find default device: %s\n", errbuf);
+			return -1;
+		}
+	}
+
+	if (pcap_lookupnet(dev, &net, &mask, errbuf) == -1)
+	{
+		fprintf(stderr, "Couldn't get netmask for device %s: %s\n", dev, errbuf);
+		net = 0;
+		mask = 0;
+	}
+
+	handle = pcap_open_live(dev, SNAP_LEN, 1, 0, errbuf);
+    if (!handle)
     {
+		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
         return -1;
     }
-    if (setFilter(dev))
-    {
-        return -1;
-    }
-    if (getPkg(dev))
-    {
-        return -1;
-    }
-    pcap_close(dev);
+
+	if (pcap_datalink(handle) != DLT_EN10MB)
+	{
+		fprintf(stderr, "%s is not an Ethernet\n", dev);
+		return -1;
+	}
+
+	pcap_loop(handle, NUM_PACKAGES, got_packet, NULL);
+
+    pcap_close(handle);
+
+	printf("\nCapture complete.\n");
     return 0;
 }
