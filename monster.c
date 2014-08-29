@@ -5,6 +5,7 @@
 
 #define SNAP_LEN		1518
 #define NUM_PACKAGES	-1
+#define FILTER			"dst port 1935"
 
 /*
 typedef enum RTMPPacketType {
@@ -39,26 +40,11 @@ typedef struct RTMPPacket {
 
 void got_packet(u_char *user, const struct pcap_pkthdr *h, const u_char *bytes)
 {
+	printf("test\n");
     if (strcmp("publish", (const char*)bytes + 0x45))
     {
         printf("%s\n", bytes + 0x96);
     }
-}
-
-int setFilter(pcap_t *dev)
-{
-    struct bpf_program filter;
-    if (pcap_compile(dev, &filter, "dst port 1935", 1, 0))
-    {
-        printf("bad filter\n");
-        return -1;
-    }
-    if (pcap_setfilter(dev, &filter))
-    {
-        printf("bad filter\n");
-        return -1;
-    }
-    return 0;
 }
 
 int main(int argc, char *argv[])
@@ -68,14 +54,15 @@ int main(int argc, char *argv[])
 	pcap_t *handle;
 	bpf_u_int32 mask;
 	bpf_u_int32 net;
+	struct bpf_program fp;
 
-
+/*
     if (getuid() != 0)
     {
-        printf("must be run as root\n");
+        fprintf(strerr, "must be run as root\n\n");
         return -1;
     }
-
+*/
 	if (argc == 2)
 	{
 		dev = argv[1];
@@ -102,7 +89,11 @@ int main(int argc, char *argv[])
 		mask = 0;
 	}
 
-	handle = pcap_open_live(dev, SNAP_LEN, 1, 0, errbuf);
+	printf("Device: %s\n", dev);
+	printf("Net: %d.%d.%d.%d\n", net & 0xFF, net >> 8 & 0xFF, net >> 16 & 0xFF, net >> 24 & 0xFF);
+	printf("Mask: %d.%d.%d.%d\n", mask & 0xFF, mask >> 8 & 0xFF, mask >> 16 & 0xFF, mask >> 24 & 0xFF);
+
+	handle = pcap_open_live(dev, SNAP_LEN, 1, 1000, errbuf);
     if (!handle)
     {
 		fprintf(stderr, "Couldn't open device %s: %s\n", dev, errbuf);
@@ -113,6 +104,18 @@ int main(int argc, char *argv[])
 	{
 		fprintf(stderr, "%s is not an Ethernet\n", dev);
 		return -1;
+	}
+
+	if (pcap_compile(handle, &fp, FILTER, 0, net) == -1)
+	{
+		fprintf(stderr, "Couldn't parse filter %s: %s\n", filter_exp, pcap_geterr(handle));
+		return -1;
+	}
+
+	if (pcap_setfilter(handle, &fp) == -1)
+	{
+		fprintf(stderr, "Couldn't install filter %s: %s\n", filter_exp, pcap_geterr(handle));
+		return;
 	}
 
 	pcap_loop(handle, NUM_PACKAGES, got_packet, NULL);
