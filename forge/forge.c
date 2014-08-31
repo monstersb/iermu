@@ -11,6 +11,7 @@ int setstreamproperty(RTMP *rtmp);
 int releasestream(RTMP *rtmp);
 int createstream(RTMP *rtmp);
 int publish(RTMP *rtmp);
+char *parser(char *data, int mi, int si);
 
 int main(int argc, char *argv[])
 {
@@ -41,10 +42,10 @@ int main(int argc, char *argv[])
 	}
 	while (!(RTMP_ReadPacket(rtmp, &packet) && packet.m_packetType == 20 && packet.m_nBodySize == packet.m_nBytesRead));
 	printf("\r");
-	printf("Server : %s\n", (char*)packet.m_body + 0x2B - 0x0C);
-	printf("Code : %s\n", (char*)packet.m_body + 0x7A - 0x0C);
-	printf("Version : %s\n", (char*)packet.m_body + 0xFB - 0x0C);
-	printf("Client ID : %s\n", (char*)packet.m_body + 0x113 - 0x0C);
+	printf("Server : %s\n", parser(packet.m_body, 2, 0));
+	printf("Code : %s\n", parser(packet.m_body, 3, 1));
+	printf("Description : %s\n", parser(packet.m_body, 3, 2));
+	printf("Client ID : %s\n", parser(packet.m_body, 3, 6));
 	printf("\n");
 	printf("waiting ...");
 	fflush(stdout);
@@ -60,6 +61,7 @@ int main(int argc, char *argv[])
 		uint32_t trap = ntohl(*(uint32_t*)(packet.m_body + 2));
 		printf("\r");
 		printf("rtmp ping requests from server : % d\n", trap);
+		printf("\n");
 		packet.m_nChannel = 0x02;
 		packet.m_headerType = RTMP_PACKET_SIZE_MEDIUM;
 		packet.m_packetType = 0x04;
@@ -92,6 +94,13 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Can not publish\n");
 		return -1;
 	}
+	while (!(RTMP_ReadPacket(rtmp, &packet) && packet.m_headerType == RTMP_PACKET_SIZE_LARGE && packet.m_nBodySize == packet.m_nBytesRead));
+	printf("\r");
+	printf("Code : %s\n", parser(packet.m_body, 3, 1));
+	printf("Description : %s\n", parser(packet.m_body, 3, 2));
+	printf("Client ID : %s\n", parser(packet.m_body, 3, 3));
+
+	printf("\n");
 
 	return 0;
 }
@@ -298,3 +307,94 @@ int publish(RTMP *rtmp)
     packet.m_nBodySize = enc - packet.m_body;
     return RTMP_SendPacket(rtmp, &packet, TRUE);
 }  
+
+char *parser(char *data, int mi, int si)
+{
+	int i, j;
+	char *p = data;
+	for (i = 0; i < mi; i++)
+	{
+		switch (*p)
+		{
+		case AMF_NUMBER:
+			p = p + 9;
+			break;
+		case AMF_BOOLEAN:
+			p = p + 2;
+			break;
+		case AMF_STRING:
+			p = p + 1 + 2 + ntohs(*(uint16_t*)(p + 1));
+			break;
+		case AMF_OBJECT:
+			p = p + 1;
+			while (!(p[0] == '\x00' && p[1] == '\x00' && p[2] == '\x09'))
+			{
+				p = p + 2 + ntohs(*(uint16_t*)(p));
+				switch (*p)
+				{
+				case AMF_NUMBER:
+					p = p + 9;
+					break;
+				case AMF_BOOLEAN:
+					p = p + 2;
+					break;
+				case AMF_STRING:
+					p = p + 1 + 2 + ntohs(*(uint16_t*)(p + 1));
+					break;
+				case AMF_NULL:
+					p = p + 1;
+					break;
+				}
+			}
+			p = p + 3;
+			break;
+		case AMF_NULL:
+			p = p + 1;
+			break;
+		}
+	}
+	p = p + 1;
+	for (j = 0; j < si; j++)
+	{
+		p = p + 2 + ntohs(*(uint16_t*)(p));
+		switch (*p)
+		{
+		case AMF_NUMBER:
+			p = p + 9;
+			break;
+		case AMF_BOOLEAN:
+			p = p + 2;
+			break;
+		case AMF_STRING:
+			p = p + 1 + 2 + ntohs(*(uint16_t*)(p + 1));
+			break;
+		case AMF_NULL:
+			p = p + 1;
+			break;
+		case AMF_ECMA_ARRAY:
+			p = p + 5;			
+			while (!(p[0] == '\x00' && p[1] == '\x00' && p[2] == '\x09'))
+			{
+				p = p + 2 + ntohs(*(uint16_t*)(p));
+				switch (*p)
+				{
+				case AMF_NUMBER:
+					p = p + 9;
+					break;
+				case AMF_BOOLEAN:
+					p = p + 2;
+					break;
+				case AMF_STRING:
+					p = p + 1 + 2 + ntohs(*(uint16_t*)(p + 1));
+					break;
+				case AMF_NULL:
+					p = p + 1;
+					break;
+				}
+			}
+			p = p + 3;
+		}
+	}
+	p = p + 2 + ntohs(*(uint16_t*)(p));
+	return p + 3;
+}
